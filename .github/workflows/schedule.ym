@@ -2,9 +2,9 @@ name: Daily Marketing Bot Run
 
 on:
   schedule:
-    # 한국 시간(KST) 매일 아침 9시 실행 (UTC 기준 0시)
+    # 한국 시간(KST) 매일 아침 9시 실행
     - cron: '0 0 * * *'
-  workflow_dispatch: # 수동으로 즉시 실행하는 버튼
+  workflow_dispatch:
 
 jobs:
   run-bot:
@@ -25,6 +25,6 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.TOEKN_GITHUB }}
+          GEMINI_API_KEY: ${{ secrets.APIKEY_GEMINI }}
         run: python bot.py
