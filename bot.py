@@ -6,15 +6,15 @@ import asyncio
 import google.generativeai as genai
 from telegram import Bot
 
-# 유저님이 등록한 시크릿 이름으로 직접 호출하도록 수정
+# 유저님이 등록한 이름(APIKEY_GEMINI) 그대로 가져오도록 설정!
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-GITHUB_TOKEN = os.environ.get("TOEKN_GITHUB")
 GEMINI_API_KEY = os.environ.get("APIKEY_GEMINI")
 
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
+# 깃허브 401 에러 원천 차단 (인증 없이 공개 데이터만 검색)
 github_headers = {
     "Accept": "application/vnd.github.v3+json"
 }
