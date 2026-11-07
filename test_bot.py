@@ -5,11 +5,14 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import sys
+from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 import requests
 import bot
+from budget import Decision
 
 ENV = {'TELEGRAM_TOKEN': 'fixture-secret-token', 'TELEGRAM_CHAT_ID': 'fixture-chat', 'GEMINI_KEY': 'fixture-ai-key'}
 
@@ -27,6 +30,10 @@ class Tests(unittest.TestCase):
         self.logs = contextlib.redirect_stdout(self.output);self.logs.__enter__()
         self.err = io.StringIO()
         self.errors = contextlib.redirect_stderr(self.err);self.errors.__enter__()
+        budget_patch = patch.object(bot, 'check_budget', return_value=Decision(True, 'fixture', 1, '123'))
+        budget_patch.start();self.addCleanup(budget_patch.stop)
+        claim_patch = patch.object(bot, 'claim_once')
+        claim_patch.start();self.addCleanup(claim_patch.stop)
 
     def tearDown(self):
         self.logs.__exit__(None, None, None);self.errors.__exit__(None, None, None)
@@ -78,10 +85,38 @@ class Tests(unittest.TestCase):
             self.assertIn('선정 이유', send.call_args_list[1].args[2]);ai.assert_called_once()
 
     def test_missing_gemini_key_is_notified_without_ai(self):
-        with patch.dict(os.environ, {k: v for k, v in ENV.items() if k != 'GEMINI_KEY'}, clear=True), patch.object(bot, 'send_telegram') as send:
+        with patch.dict(os.environ, {k: v for k, v in ENV.items() if k != 'GEMINI_KEY'}, clear=True), patch.object(bot, 'send_telegram') as send, patch.object(bot, 'search_repos', return_value=[repo(1)]), patch.object(bot, 'github_get', return_value=None):
             self.assertEqual(bot.entrypoint([]), 1)
             self.assertIn('GEMINI_KEY', send.call_args.args[2])
             self.assertIn('실행 실패', send.call_args.args[2])
+
+    def test_budget_block_sends_unassessed_candidates_without_key_or_ai(self):
+        with patch.dict(os.environ, {k: v for k, v in ENV.items() if k != 'GEMINI_KEY'}, clear=True), patch.object(bot, 'send_telegram') as send, patch.object(bot, 'search_repos', return_value=[repo(1)]), patch.object(bot, 'check_budget', return_value=Decision(False, '월 보호 한도 도달', 50)), patch.object(bot, 'curate') as ai, patch.object(bot, 'github_get') as readme:
+            self.assertEqual(bot.entrypoint([]), 0)
+            messages='\n'.join(c.args[2] for c in send.call_args_list)
+            self.assertIn('AI 미평가 검색 후보', messages)
+            self.assertIn('5,000/5,000', messages)
+            ai.assert_not_called();readme.assert_not_called()
+
+    def test_sdk_request_has_one_attempt_bounded_output_and_no_paid_tools(self):
+        google, genai = ModuleType('google'), ModuleType('google.genai')
+        google.genai = genai
+        genai.errors = SimpleNamespace(APIError=type('FixtureAPIError', (Exception,), {}))
+        genai.types = SimpleNamespace(**{name: Mock(side_effect=lambda **values: values)
+            for name in ('HttpOptions','HttpRetryOptions','GenerateContentConfig','ThinkingConfig')})
+        client=Mock();client.__enter__=Mock(return_value=client);client.__exit__=Mock(return_value=False)
+        client.models.generate_content.return_value=SimpleNamespace(text=json.dumps([assessment(1,True)]),usage_metadata=None)
+        genai.Client=Mock(return_value=client)
+        with patch.dict(sys.modules,{'google':google,'google.genai':genai}):
+            bot.curate('fixture-key',bot.MODEL,[{**repo(1),'excerpt':'長い説明'*10000}])
+        client.models.generate_content.assert_called_once()
+        request=client.models.generate_content.call_args.kwargs
+        self.assertEqual(request['config']['max_output_tokens'],6144)
+        self.assertNotIn('tools',request['config'])
+        self.assertLessEqual(len(request['contents'].encode('utf-8')),16000)
+        options=genai.Client.call_args.kwargs
+        self.assertEqual(options['http_options']['retry_options']['attempts'],1)
+        self.assertIs(options['vertexai'],False)
 
     def test_ai_quota_error_notifies_and_keeps_nonzero_exit(self):
         with tempfile.TemporaryDirectory() as temp:
