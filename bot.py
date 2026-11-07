@@ -6,15 +6,18 @@ import asyncio
 import google.generativeai as genai
 from telegram import Bot
 
-# 유저님이 등록한 이름(APIKEY_GEMINI) 그대로 가져오도록 설정!
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-GEMINI_API_KEY = os.environ.get("APIKEY_GEMINI")
+GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
+
+# 🚨 에러 원인 추적 코드 추가
+if not GEMINI_API_KEY:
+    print("❌ 치명적 에러: 깃허브 시크릿에서 제미나이 키를 가져오지 못했습니다. 값이 비어있습니다!")
+    exit(1)
 
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 깃허브 401 에러 원천 차단 (인증 없이 공개 데이터만 검색)
 github_headers = {
     "Accept": "application/vnd.github.v3+json"
 }
@@ -68,7 +71,7 @@ async def main():
             await telegram_bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
             
         except Exception as e:
-            print(f"에러 발생 ({repo_name}): {e}")
+            print(f"메시지 발송 에러 ({repo_name}): {e}")
         
         time.sleep(2)
 
