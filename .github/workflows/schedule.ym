@@ -24,5 +24,5 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          APIKEY_GEMINI: ${{ secrets.APIKEY_GEMINI }}
+          GOOGLE_API_KEY: ${{ secrets.APIKEY_GEMINI }}
         run: python bot.py
