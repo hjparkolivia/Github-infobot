@@ -2,8 +2,9 @@ name: Daily Marketing Bot Run
 
 on:
   schedule:
-    # 기존 일정 유지: UTC 00:00 = 한국 시간 매일 오전 09:00
-    - cron: "0 0 * * *"
+    # Avoid top-of-hour congestion. Start 08:47 KST; wait until 09:00.
+    # GitHub schedule delivery is best effort, not an exact-time guarantee.
+    - cron: "47 23 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -16,7 +17,7 @@ on:
           - error-alert-test
 
 permissions:
-  contents: read
+  contents: write # persist only public recommendation names in state/sent.json
   actions: read
 
 concurrency:
@@ -29,6 +30,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - name: Wait until 09:00 KST for scheduled runs
+        if: ${{ github.event_name == 'schedule' }}
+        run: |
+          python3 - <<'PY'
+          from datetime import datetime, timezone, timedelta
+          import time
+          now = datetime.now(timezone(timedelta(hours=9)))
+          target = now.replace(hour=9, minute=0, second=0, microsecond=0)
+          delay = (target - now).total_seconds()
+          if 0 < delay <= 900:
+              time.sleep(delay)
+          print('Scheduled target: 09:00 KST; actual runner ready:', datetime.now(now.tzinfo).isoformat())
+          PY
       - name: Checkout repository
         uses: actions/checkout@v4
 

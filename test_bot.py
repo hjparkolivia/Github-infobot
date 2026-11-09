@@ -34,6 +34,10 @@ class Tests(unittest.TestCase):
         budget_patch.start();self.addCleanup(budget_patch.stop)
         claim_patch = patch.object(bot, 'claim_once')
         claim_patch.start();self.addCleanup(claim_patch.stop)
+        history_patch = patch.object(bot, 'History')
+        self.history = history_patch.start().return_value
+        self.history.seen.return_value = False
+        self.addCleanup(history_patch.stop)
 
     def tearDown(self):
         self.logs.__exit__(None, None, None);self.errors.__exit__(None, None, None)
@@ -49,10 +53,35 @@ class Tests(unittest.TestCase):
             self.assertEqual([r['id'] for r in result], [2, 3])
             for call in get.call_args_list:
                 self.assertEqual(call.kwargs['params']['sort'], 'stars')
-                self.assertEqual(call.kwargs['params']['per_page'], 10)
+                self.assertEqual(call.kwargs['params']['per_page'], 30)
                 self.assertNotIn('readme', call.kwargs['params']['q'])
         self.assertIn('채용·인턴 공고 목록', self.output.getvalue())
         self.assertIsNone(bot.exclusion_reason(repo(1, 'org/job-scheduler')))
+
+    def test_history_filters_before_candidate_limit_and_logs_reason(self):
+        history = Mock();history.seen.side_effect = lambda r: r['id'] == 1
+        state = bot.RunState()
+        with patch.object(bot, 'QUERIES', ['one']), patch.object(bot, 'github_get', return_value=Mock(json=Mock(return_value={'items': [repo(1), repo(2)]}))):
+            result = bot.search_repos(Mock(), state, history)
+        self.assertEqual([r['id'] for r in result], [2])
+        self.assertEqual(state.duplicates, 1)
+        self.assertIn('이전에 전송', self.output.getvalue())
+
+    def test_claude_only_excluded_but_shared_mcp_allowed(self):
+        self.assertIn('Claude 전용', bot.exclusion_reason({**repo(1), 'description': 'Marketing plugin exclusively for Claude Code'}))
+        self.assertIsNone(bot.exclusion_reason({**repo(2), 'description': 'MCP server for Codex and Claude Code'}))
+
+    def test_history_failure_prevents_search_ai_and_recommendations(self):
+        with patch.dict(os.environ, ENV, clear=True), patch.object(bot, 'History', side_effect=bot.HistoryError('전송 이력 읽기 실패')), patch.object(bot, 'send_telegram') as send, patch.object(bot, 'search_repos') as search, patch.object(bot, 'curate') as ai:
+            self.assertEqual(bot.entrypoint([]), 1)
+            search.assert_not_called();ai.assert_not_called()
+            self.assertIn('전송 이력', send.call_args.args[2])
+
+    def test_reservation_failure_sends_no_recommendation(self):
+        self.history.reserve.side_effect = bot.HistoryError('전송 이력 저장 실패')
+        with patch.dict(os.environ, ENV, clear=True), patch.object(bot, 'send_telegram') as send, patch.object(bot, 'search_repos', return_value=[repo(1)]), patch.object(bot, 'github_get', return_value=None), patch.object(bot, 'curate', return_value={1: assessment(1, True)}):
+            self.assertEqual(bot.entrypoint([]), 1)
+            self.assertFalse(any('📈' in c.args[2] for c in send.call_args_list))
 
     def test_all_search_errors_fail_instead_of_silent_zero(self):
         with patch.object(bot, 'QUERIES', ['one']), patch.object(bot, 'github_get', side_effect=bot.BotError('GitHub API 오류: HTTP 403')):
@@ -113,6 +142,8 @@ class Tests(unittest.TestCase):
         request=client.models.generate_content.call_args.kwargs
         self.assertEqual(request['config']['max_output_tokens'],6144)
         self.assertNotIn('tools',request['config'])
+        self.assertIn('Claude 전용', request['config']['system_instruction'])
+        self.assertIn('Codex 활용 경로와 근거', request['config']['system_instruction'])
         self.assertLessEqual(len(request['contents'].encode('utf-8')),16000)
         options=genai.Client.call_args.kwargs
         self.assertEqual(options['http_options']['retry_options']['attempts'],1)
