@@ -134,6 +134,7 @@ def trim_utf8(text, length):
 def payload_for(repos):
     payload = [{'id': r['id'], 'repository': r['full_name'],
                 'description': trim_utf8(r.get('description') or '', 500),
+                'previously_sent': r.get('repeat_candidate') is True,
                 'topics': [trim_utf8(str(t), 50) for t in r.get('topics', [])[:8]],
                 'readme_excerpt': trim_utf8(r.get('excerpt', ''), 2000)} for r in repos]
     def encode():return json.dumps(payload, ensure_ascii=False, separators=(',', ':'))

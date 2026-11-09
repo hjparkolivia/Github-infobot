@@ -37,6 +37,7 @@ class Tests(unittest.TestCase):
         history_patch = patch.object(bot, 'History')
         self.history = history_patch.start().return_value
         self.history.seen.return_value = False
+        self.history.repeat_due.return_value = False
         self.addCleanup(history_patch.stop)
 
     def tearDown(self):
@@ -60,6 +61,7 @@ class Tests(unittest.TestCase):
 
     def test_history_filters_before_candidate_limit_and_logs_reason(self):
         history = Mock();history.seen.side_effect = lambda r: r['id'] == 1
+        history.repeat_due.return_value = False
         state = bot.RunState()
         with patch.object(bot, 'QUERIES', ['one']), patch.object(bot, 'github_get', return_value=Mock(json=Mock(return_value={'items': [repo(1), repo(2)]}))):
             result = bot.search_repos(Mock(), state, history)
@@ -83,6 +85,23 @@ class Tests(unittest.TestCase):
             self.assertEqual(bot.entrypoint([]), 1)
             search.assert_not_called();ai.assert_not_called()
             self.assertIn('전송 이력', send.call_args.args[2])
+
+    def test_reminder_needs_specific_reason_and_is_labelled(self):
+        for approved in (False, True):
+            with self.subTest(approved=approved):
+                candidate = {**repo(1), 'repeat_candidate': True}
+                item = {**assessment(1, True), 'repeat_worthy': approved,
+                        'repeat_reason': '우리 릴스 편집 파이프라인의 마지막 다운로드 음성 합성을 자동화하는 데 바로 적용할 수 있음'}
+                with patch.dict(os.environ, ENV, clear=True), patch.object(bot, 'send_telegram') as send, patch.object(bot, 'search_repos', return_value=[candidate]), patch.object(bot, 'github_get', return_value=None), patch.object(bot, 'curate', return_value={1: item}):
+                    self.assertEqual(bot.entrypoint([]), 0)
+                    messages = '\n'.join(c.args[2] for c in send.call_args_list)
+                    self.assertEqual('다시 추천하는 이유:' in messages, approved)
+                    self.assertEqual('🔁 유용한 도구 다시 보기' in messages, approved)
+
+    def test_free_fallback_does_not_send_unevaluated_reminder(self):
+        with patch.dict(os.environ, ENV, clear=True), patch.object(bot, 'send_telegram') as send, patch.object(bot, 'search_repos', return_value=[{**repo(1), 'repeat_candidate': True}]), patch.object(bot, 'check_budget', return_value=Decision(False, '한도 도달')):
+            self.assertEqual(bot.entrypoint([]), 0)
+            self.assertFalse(any('🔎 AI 미평가 검색 후보:' in c.args[2] for c in send.call_args_list))
 
     def test_reservation_failure_sends_no_recommendation(self):
         self.history.reserve.side_effect = bot.HistoryError('전송 이력 저장 실패')

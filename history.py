@@ -1,10 +1,10 @@
-"""Durable at-most-once recommendations. Missing/corrupt history fails closed.
+"""Durable delivery history with deliberate, cooldown-limited reminders.
 
 Reserve before Telegram: an ambiguous send is never automatically resent.
 Only public repo names, status and timestamps are stored; no chat IDs or keys.
 """
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import os
 import re
@@ -47,6 +47,16 @@ class History:
     def seen(self, repo):
         return repo['full_name'].casefold() in self.data['repos']
 
+    def repeat_due(self, repo, now=None):
+        record = self.data['repos'].get(repo['full_name'].casefold(), {})
+        if record.get('status') != 'sent':
+            return False  # Ambiguous/failed sends are never automatically retried.
+        try:
+            sent = datetime.fromisoformat(record['at'].replace('Z', '+00:00'))
+            return (now or datetime.now(timezone.utc)) - sent >= timedelta(days=14)
+        except (KeyError, TypeError, ValueError):
+            return False
+
     def record(self, repo, status):
         self.data['repos'][repo['full_name'].casefold()] = {
             'status': status, 'at': datetime.now(timezone.utc).isoformat(),
@@ -60,7 +70,7 @@ class History:
             raise HistoryError('전송 이력 저장 응답 불명확: 전송 중단') from None
 
     def reserve(self, repo):
-        if self.seen(repo):
+        if self.seen(repo) and not (repo.get('repeat_candidate') is True and self.repeat_due(repo)):
             raise HistoryError('이미 전송 또는 전송 시도한 후보입니다')
         self.record(repo, 'reserved')
 

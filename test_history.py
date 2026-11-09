@@ -3,6 +3,7 @@ import json
 import os
 import unittest
 from unittest.mock import Mock, patch
+from datetime import datetime, timezone, timedelta
 
 from history import History, HistoryError
 
@@ -42,6 +43,18 @@ class HistoryTests(unittest.TestCase):
         self.session.put.side_effect = None
         self.session.put.return_value = Mock(status_code=409)
         with self.assertRaises(HistoryError):history.reserve({'full_name': 'owner/new'})
+
+    def test_reminders_wait_fourteen_days_and_never_retry_ambiguous_sends(self):
+        history = History(self.session)
+        repo = {'full_name': 'owner/old', 'repeat_candidate': True}
+        now = datetime.now(timezone.utc)
+        for days, status, expected in ((13, 'sent', False), (14, 'sent', True), (90, 'reserved', False)):
+            history.data['repos']['owner/old'] = {'status': status, 'at': (now - timedelta(days=days)).isoformat()}
+            self.assertIs(history.repeat_due(repo, now=now), expected)
+        history.data['repos']['owner/old'] = {'status': 'sent', 'at': (now - timedelta(days=15)).isoformat()}
+        history.reserve(repo)
+        self.assertFalse(history.repeat_due(repo))
+        with self.assertRaises(HistoryError):history.reserve(repo)
 
 
 if __name__ == '__main__':

@@ -29,7 +29,8 @@ MAX_SEND, MAX_CANDIDATES = 3, 12
 SCHEMA = {'type': 'array', 'items': {'type': 'object', 'properties': {
     'id': {'type': 'integer'}, 'useful': {'type': 'boolean'},
     'reason': {'type': 'string'}, 'summary': {'type': 'string'},
-}, 'required': ['id', 'useful', 'reason', 'summary']}}
+    'repeat_worthy': {'type': 'boolean'}, 'repeat_reason': {'type': 'string'},
+}, 'required': ['id', 'useful', 'reason', 'summary', 'repeat_worthy', 'repeat_reason']}}
 
 class BotError(RuntimeError):
     """Safe locally composed messages, never raw token-bearing HTTP errors."""
@@ -45,6 +46,7 @@ class RunState:
     fallback_sent: int = 0
     budget_note: str = ''
     duplicates: int = 0
+    reminders: int = 0
 
 def required_env(name):
     value = os.getenv(name, '').strip()
@@ -111,7 +113,9 @@ def search_repos(session, state=None, history=None):
             group = []
             for item in items:
                 if item['id'] not in repos:
-                    duplicate = history is not None and history.seen(item)
+                    seen = history is not None and history.seen(item)
+                    item['repeat_candidate'] = bool(seen and history.repeat_due(item))
+                    duplicate = seen and not item['repeat_candidate']
                     reason = '이전에 전송·전송 시도한 도구: 재전송 제외' if duplicate else exclusion_reason(item)
                     if reason:
                         if duplicate:
@@ -133,14 +137,20 @@ def search_repos(session, state=None, history=None):
         raise BotError('모든 GitHub 검색이 실패했습니다. 호출 한도·연결을 확인하세요.')
     # Represent each category before filling remaining places by popularity.
     chosen = {}
+    def add(repo):
+        if len(chosen) >= MAX_CANDIDATES:
+            return
+        if repo.get('repeat_candidate') and any(r.get('repeat_candidate') for r in chosen.values()):
+            return  # At most one reminder candidate, leaving room for new tools.
+        chosen[repo['id']] = repo
     for rank in range(3):
         for group in groups:
             if rank < len(group) and len(chosen) < MAX_CANDIDATES:
-                chosen[group[rank]] = repos[group[rank]]
+                add(repos[group[rank]])
     for repo in sorted((r for r in repos.values() if r), key=lambda r: r['stargazers_count'], reverse=True):
         if len(chosen) >= MAX_CANDIDATES:
             break
-        chosen[repo['id']] = repo
+        add(repo)
     return sorted(chosen.values(), key=lambda r: r['stargazers_count'], reverse=True)
 
 def validate_assessments(data, repos):
@@ -188,6 +198,10 @@ def curate(key, model, repos):
         'useful=true면 summary는 한국어 3줄: 핵심 기능 / 우리 앱 홍보에 쓰는 구체적 방법 / '
         '설치·비용·라이선스·제약(미확인 사항은 확인 필요). false면 summary는 빈 문자열도 된다. '
         'README 주장을 검증된 사실처럼 단정하거나 설치·보안 검사가 끝났다고 주장하지 마라.'
+        'previously_sent=true는 14일 이상 전에 이미 보낸 도구다. 단순히 유용하거나 유명하다는 이유로 다시 보내지 마라. '
+        '우리 앱에 지금 적용할 구체적이고 높은 가치의 활용 근거가 있을 때만 repeat_worthy=true로 하라. '
+        '그 이유와 적용 작업을 repeat_reason에 구체적으로 쓰고, 근거 부족이면 false와 빈 문자열로 하라. '
+        '새 후보는 repeat_worthy=false, repeat_reason은 빈 문자열이다.'
     )
     request_bytes = len(payload.encode('utf-8')) + len(instruction.encode('utf-8')) + len(json.dumps(SCHEMA).encode()) + 4096
     if request_bytes > MAX_INPUT_BYTES:
@@ -289,6 +303,10 @@ def run(state, token, chat_id):
             compatibility = codex_compatibility_reason(repo)
             if compatibility:
                 item.update(useful=False, reason=compatibility, summary='')
+            if repo.get('repeat_candidate') and not (
+                    item.get('repeat_worthy') is True and isinstance(item.get('repeat_reason'), str)
+                    and len(item['repeat_reason'].strip()) >= 25):
+                item.update(useful=False, reason='재추천할 구체적 고가치 활용 근거 부족', summary='')
             if not item['useful']:
                 state.excluded += 1
                 print(f"관련성 부족으로 제외: {repo['full_name']} — {item['reason'][:350]}")
@@ -296,17 +314,24 @@ def run(state, token, chat_id):
                 print(f"추천 후보: {repo['full_name']} — {item['reason'][:350]}")
         state.stage = '추천 메시지 전송'
         # Explicit Codex support first, then portable tools by existing star order.
-        repos = sorted(repos, key=lambda r: not bool(re.search(r'\bcodex\b',
-            (r.get('excerpt') or '') + ' ' + (r.get('description') or ''), re.I)))
+        repos = sorted(repos, key=lambda r: (bool(r.get('repeat_candidate')), not bool(re.search(r'\bcodex\b',
+            (r.get('excerpt') or '') + ' ' + (r.get('description') or ''), re.I))))
+        if any(r.get('repeat_candidate') and assessments[r['id']]['useful'] for r in repos):
+            # A valuable reminder may occupy one of the three slots, never all.
+            repos = [r for r in repos if not r.get('repeat_candidate') and assessments[r['id']]['useful']][:MAX_SEND - 1] + [r for r in repos if r.get('repeat_candidate')]
         for repo in repos:
             item = assessments[repo['id']]
             if not item['useful'] or state.sent >= MAX_SEND:
                 continue
             history.reserve(repo)
-            send_telegram(token, chat_id, f"📈 {repo['full_name']} (⭐ {repo['stargazers_count']:,})\n{repo['html_url']}\n\n"
-                f"선정 이유: {item['reason'][:350]}\n\n💡 앱 마케팅 활용\n{item['summary'][:1400]}")
+            reminder = repo.get('repeat_candidate') is True
+            prefix = '🔁 유용한 도구 다시 보기\n' if reminder else ''
+            repeat_note = f"\n\n다시 추천하는 이유: {item['repeat_reason'][:500]}" if reminder else ''
+            send_telegram(token, chat_id, prefix + f"📈 {repo['full_name']} (⭐ {repo['stargazers_count']:,})\n{repo['html_url']}\n\n"
+                f"선정 이유: {item['reason'][:350]}\n\n💡 앱 마케팅 활용\n{item['summary'][:1400]}" + repeat_note)
             state.sent += 1
             history.confirm(repo)
+            state.reminders += int(reminder)
             print(f"전송 완료: {repo['full_name']}")
     elif repos:
         state.stage = '비용 보호 · 무료 후보 안내'
@@ -314,6 +339,8 @@ def run(state, token, chat_id):
                       + '\n추가 AI 요금 없이 검색 후보를 보냅니다. AI가 검토한 추천은 아닙니다.')
         portable = []
         for repo in repos:
+            if repo.get('repeat_candidate'):
+                continue  # No AI evaluation: no value-based reminder approval.
             reason = codex_compatibility_reason(repo)
             if reason:
                 state.excluded += 1
@@ -332,7 +359,7 @@ def run(state, token, chat_id):
     if not state.sent and not state.fallback_sent:
         title += '\n이번 실행은 추천 0개입니다. 봇이 조용히 종료된 것이 아닙니다.'
     message = (f'{title}\n검색 후보 {state.candidates}개 / AI 평가 {state.ai_assessed}개 / 제외 {state.excluded}개 '
-               f'/ 이전 전송 제외 {state.duplicates}개 / 추천 전송 {state.sent}개 / 미평가 후보 안내 {state.fallback_sent}개 / 처리 오류 {len(state.errors)}개'
+               f'/ 이전 전송 제외 {state.duplicates}개 / 추천 전송 {state.sent}개 (재소개 {state.reminders}개) / 미평가 후보 안내 {state.fallback_sent}개 / 처리 오류 {len(state.errors)}개'
                f'\n{state.budget_note}')
     if state.errors:
         message += '\n' + '\n'.join(state.errors[:4])
