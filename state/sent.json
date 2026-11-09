@@ -16,6 +16,10 @@
     "public-apis/public-apis": {
       "status": "sent",
       "at": "2026-11-09T00:27:42.439802+00:00"
+    },
+    "umami-software/umami": {
+      "status": "reserved",
+      "at": "2026-11-09T00:27:43.344048+00:00"
     }
   }
 }
