@@ -312,7 +312,15 @@ def run(state, token, chat_id):
         state.stage = '비용 보호 · 무료 후보 안내'
         send_telegram(token, chat_id, '🛡️ AI 비용 보호 모드\n' + state.budget_note
                       + '\n추가 AI 요금 없이 검색 후보를 보냅니다. AI가 검토한 추천은 아닙니다.')
-        for repo in repos[:MAX_SEND]:
+        portable = []
+        for repo in repos:
+            reason = codex_compatibility_reason(repo)
+            if reason:
+                state.excluded += 1
+                print(f"비용 보호 후보 제외: {repo['full_name']} — {reason}")
+            else:
+                portable.append(repo)
+        for repo in portable[:MAX_SEND]:
             history.reserve(repo)
             send_telegram(token, chat_id, f"🔎 AI 미평가 검색 후보: {repo['full_name']}\n{repo['html_url']}\n"
                           f"GitHub 설명: {(repo.get('description') or '설명 없음')[:700]}")
