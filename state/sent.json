@@ -20,6 +20,10 @@
     "umami-software/umami": {
       "status": "sent",
       "at": "2026-11-09T00:27:44.676595+00:00"
+    },
+    "anil-matcha/open-generative-ai": {
+      "status": "reserved",
+      "at": "2026-11-09T00:27:45.435501+00:00"
     }
   }
 }
