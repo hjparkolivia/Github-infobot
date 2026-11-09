@@ -71,9 +71,26 @@ def exclusion_reason(repo):
     name = repo['full_name'].split('/')[-1].lower()
     if re.search(r'new[-_ ]?grad|internships?(?:[-_ ]|$)|(?:job|hiring)[-_ ]?(?:list|listings)', name):
         return '채용·인턴 공고 목록으로 앱 마케팅 실행 도구가 아님'
+    if name.startswith('awesome-') or name == 'public-apis':
+        return '링크 모음·카탈로그로 직접 실행하는 마케팅 도구가 아님'
     description = (repo.get('description') or '').lower()
     if re.search(r'(?:only|exclusively) (?:for )?claude|claude(?: code)?[- ]only|claude 전용', description):
         return 'Claude 전용 도구: Codex 활용 대상에서 제외'
+    return None
+
+
+def codex_compatibility_reason(repo):
+    """Require documented Codex support for agent-specific packages.
+
+    Ordinary CLI/API/libraries are portable; do not equate a shared skill file
+    or a Claude installation guide with verified Codex compatibility.
+    """
+    name = repo['full_name'].split('/')[-1].lower()
+    evidence = ' '.join([repo.get('description') or '', repo.get('excerpt') or '',
+                         ' '.join(repo.get('topics') or [])]).lower()
+    agent_package = re.search(r'claude|cursor|(?:^|[-_])skills?(?:$|[-_])|(?:^|[-_])plugin', name)
+    if agent_package and not re.search(r'\bcodex\b', evidence):
+        return 'Codex 지원 근거 미확인: 에이전트 전용 패키지는 Claude/Cursor 지원만으로 추천하지 않음'
     return None
 
 def search_repos(session, state=None, history=None):
@@ -269,12 +286,18 @@ def run(state, token, chat_id):
         state.ai_assessed = len(repos)
         for repo in repos:
             item = assessments[repo['id']]
+            compatibility = codex_compatibility_reason(repo)
+            if compatibility:
+                item.update(useful=False, reason=compatibility, summary='')
             if not item['useful']:
                 state.excluded += 1
                 print(f"관련성 부족으로 제외: {repo['full_name']} — {item['reason'][:350]}")
             else:
                 print(f"추천 후보: {repo['full_name']} — {item['reason'][:350]}")
         state.stage = '추천 메시지 전송'
+        # Explicit Codex support first, then portable tools by existing star order.
+        repos = sorted(repos, key=lambda r: not bool(re.search(r'\bcodex\b',
+            (r.get('excerpt') or '') + ' ' + (r.get('description') or ''), re.I)))
         for repo in repos:
             item = assessments[repo['id']]
             if not item['useful'] or state.sent >= MAX_SEND:

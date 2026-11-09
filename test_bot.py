@@ -71,6 +71,13 @@ class Tests(unittest.TestCase):
         self.assertIn('Claude 전용', bot.exclusion_reason({**repo(1), 'description': 'Marketing plugin exclusively for Claude Code'}))
         self.assertIsNone(bot.exclusion_reason({**repo(2), 'description': 'MCP server for Codex and Claude Code'}))
 
+    def test_agent_skills_need_codex_evidence_not_inferred_compatibility(self):
+        candidate = {**repo(1, 'org/claude-seo'), 'excerpt': 'Install for Claude Code and Cursor'}
+        self.assertIn('Codex 지원 근거 미확인', bot.codex_compatibility_reason(candidate))
+        self.assertIsNone(bot.codex_compatibility_reason({**candidate, 'excerpt': 'Supports Codex and Claude Code'}))
+        self.assertIsNone(bot.codex_compatibility_reason(repo(2, 'Zulko/moviepy')))
+        self.assertIn('카탈로그', bot.exclusion_reason(repo(3, 'public-apis/public-apis')))
+
     def test_history_failure_prevents_search_ai_and_recommendations(self):
         with patch.dict(os.environ, ENV, clear=True), patch.object(bot, 'History', side_effect=bot.HistoryError('전송 이력 읽기 실패')), patch.object(bot, 'send_telegram') as send, patch.object(bot, 'search_repos') as search, patch.object(bot, 'curate') as ai:
             self.assertEqual(bot.entrypoint([]), 1)
