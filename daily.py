@@ -16,6 +16,10 @@ class DailyError(RuntimeError):
     pass
 
 
+class StateConflict(DailyError):
+    pass
+
+
 class Ledger:
     def __init__(self, session, day):
         repo = os.getenv('GITHUB_REPOSITORY', '')
@@ -41,6 +45,8 @@ class Ledger:
             response = getattr(self.session, method)(self.url, timeout=(10, 25), **kwargs)
         except requests.RequestException:
             raise DailyError('일별 이력 통신 실패: 중복 방지를 위해 중단') from None
+        if response.status_code == 409 and 409 not in allowed:
+            raise StateConflict('일별 이력 경합: 기존 실행권은 유지')
         if response.status_code not in allowed:
             raise DailyError(f'일별 이력 HTTP {response.status_code}: 중복 방지를 위해 중단')
         return response
@@ -87,8 +93,20 @@ def delivery(s, now=None):
     if os.getenv('DAILY_SCHEDULED') == 'true':
         os.environ['BOT_SEND_AT'] = now.astimezone(KST).replace(hour=9, minute=0, second=0, microsecond=0).isoformat()
     result = bot.entrypoint([])
-    ledger.save(status='completed' if result == 0 else 'failed',
-                completed_at=datetime.now(KST).isoformat(), exit_code=result)
+    # A concurrent watchdog may have appended its alert marker. Refresh before
+    # finalizing, preserve it, and retry only a CAS conflict for the SAME owner.
+    # This never re-runs bot/AI/Telegram or acquires a second delivery claim.
+    for attempt in range(3):
+        current = Ledger(s, day)
+        if current.data.get('run_id') != run_id:
+            raise DailyError('실행권 변경 감지: 완료 이력 덮어쓰기 중단')
+        try:
+            current.save(status='completed' if result == 0 else 'failed',
+                         completed_at=datetime.now(KST).isoformat(), exit_code=result)
+            break
+        except StateConflict:
+            if attempt == 2:
+                raise
     return result
 
 

@@ -40,13 +40,23 @@ class DailyTests(unittest.TestCase):
             run.assert_not_called()
 
     def test_scheduled_preparation_sets_09_target_and_completes_ledger(self):
-        ledger=Mock();ledger.claim.return_value=True
+        ledger=Mock();ledger.claim.return_value=True;ledger.data={'run_id':'123'}
         early=NOW.replace(hour=8, minute=44)
         with patch.dict(os.environ, {**ENV,'DAILY_SCHEDULED':'true'}, clear=True), patch.object(daily, 'Ledger', return_value=ledger), patch.object(bot, 'entrypoint', return_value=0) as run:
             daily.delivery(Mock(), early)
             self.assertEqual(os.environ['BOT_SEND_AT'], '2026-11-10T09:00:00+09:00')
             run.assert_called_once_with([])
             self.assertEqual(ledger.save.call_args.kwargs['status'], 'completed')
+
+    def test_watchdog_race_retries_only_completion_not_ai_or_delivery(self):
+        initial=Mock();initial.claim.return_value=True
+        stale=Mock();stale.data={'run_id':'123'};stale.save.side_effect=daily.StateConflict('race')
+        fresh=Mock();fresh.data={'run_id':'123','alerted_at':'earlier'}
+        with patch.dict(os.environ,ENV,clear=True), patch.object(daily,'Ledger',side_effect=[initial,stale,fresh]), patch.object(bot,'entrypoint',return_value=0) as run:
+            self.assertEqual(daily.delivery(Mock(),NOW),0)
+            run.assert_called_once_with([])
+            fresh.claim.assert_not_called()
+            self.assertEqual(fresh.save.call_args.kwargs['status'],'completed')
 
     def check(self, record, dry_run=False, now=NOW):
         ledger=Mock();ledger.data=record;s=Mock();s.post.return_value.status_code=204
