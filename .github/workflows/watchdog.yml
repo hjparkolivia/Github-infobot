@@ -1,0 +1,51 @@
+name: Daily Delivery Watchdog
+run-name: Delivery watchdog / ${{ inputs.check_id || github.run_id }}
+on:
+  schedule:
+    - cron: "7 0 * * *" # 09:07 KST; independent PC checks at 09:05/09:15.
+  workflow_dispatch:
+    inputs:
+      check_id:
+        description: "Check identifier (not a secret)"
+        type: string
+        default: manual
+      dry_run:
+        description: "Inspect only, no notification or recovery"
+        type: boolean
+        default: false
+permissions:
+  contents: write
+  actions: write # One recovery dispatch when the daily run never claimed execution.
+concurrency:
+  group: daily-delivery-watchdog
+  cancel-in-progress: false
+jobs:
+  check:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install requests
+      - name: Check daily delivery (no AI)
+        id: watch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            python daily.py watchdog --dry-run
+          else
+            python daily.py watchdog
+          fi
+      - name: Notify watchdog failure
+        if: ${{ failure() }}
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python workflow_alert.py

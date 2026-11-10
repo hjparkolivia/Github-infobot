@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "day": "2026-11-10",
+  "status": "completed",
+  "run_id": "42731911445",
+  "completed_at": "2026-11-10T09:56:43+09:00",
+  "exit_code": 0,
+  "note": "Existing manual recovery verified: 3 recommendations sent before daily guard rollout."
+}

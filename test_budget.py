@@ -33,7 +33,7 @@ def response(data=None, text=''):
 
 def setup(count=1, attempt=1, pricing=PRICING, rate=1358.73, date='2026-11-06'):
     session=Mock();session.headers={};session.__enter__=Mock(return_value=session);session.__exit__=Mock(return_value=False)
-    session.get.side_effect=[response({'id':123,'run_attempt':attempt,'head_branch':'main','event':'workflow_dispatch','created_at':'2026-11-07T00:00:00Z'}),response({'total_count':count})]
+    session.get.side_effect=[response({'id':123,'run_attempt':attempt,'head_branch':'main','path':'.github/workflows/main.yml','event':'workflow_dispatch','created_at':'2026-11-07T00:00:00Z'}),response({'total_count':count})]
     factory=Mock(return_value=session)
     external=Mock(side_effect=[response(text=pricing),response({'base':'USD','date':date,'rates':{'KRW':rate}})])
     return factory,external
@@ -52,6 +52,7 @@ class BudgetTests(unittest.TestCase):
         self.assertLessEqual(result.slots*budget.REQUEST_RESERVE_KRW,budget.MONTHLY_RESERVE_KRW)
         for call in external.call_args_list:self.assertNotIn('headers',call.kwargs)
         self.assertEqual(factory.return_value.headers['Authorization'],'Bearer FIXTURE_SECRET')
+        self.assertTrue(factory.return_value.get.call_args_list[1].args[0].endswith('/actions/workflows/main.yml/runs'))
 
     def test_over_budget_blocks_before_price_or_fx_fetch(self):
         result,_,external=self.decide(count=51)

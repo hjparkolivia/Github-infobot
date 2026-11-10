@@ -1,6 +1,6 @@
 """Fail-closed cost controls for THIS bot, not an account-wide billing cap.
 
-No cache/file counter reset: all repository workflow runs in the KST month
+No cache/file counter reset: all delivery-workflow runs in the KST month
 consume a conservative slot, including failed/test runs. Re-runs cannot use AI.
 No paid call is made if history, official prices or FX cannot be verified.
 """
@@ -83,10 +83,13 @@ def check_budget(model, *, now=None, session_factory=requests.Session, external_
             created = datetime.fromisoformat(current['created_at'].replace('Z', '+00:00'))
             if (current['id'] != int(run_id) or current['run_attempt'] != 1
                     or current['head_branch'] != 'main'
+                    or current.get('path') != '.github/workflows/main.yml'
                     or current['event'] not in ('schedule', 'workflow_dispatch')
                     or created.astimezone(KST).strftime('%Y-%m') != now.astimezone(KST).strftime('%Y-%m')):
                 return Decision(False, '현재 실행 식별·월 경계 대조 실패', run_id=run_id)
-            response = session.get(f'https://api.github.com/repos/{repo}/actions/runs',
+            # The separate watchdog has no AI path and does not consume a paid slot.
+            # Delivery attempts (even skipped/test/failed ones) remain conservative slots.
+            response = session.get(f'https://api.github.com/repos/{repo}/actions/workflows/main.yml/runs',
                 params={'created': month_window(now), 'per_page': 1}, timeout=(10, 20))
             response.raise_for_status();count = response.json().get('total_count')
         if type(count) is not int or count < 1:

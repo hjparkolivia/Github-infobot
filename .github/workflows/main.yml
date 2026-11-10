@@ -1,10 +1,11 @@
 name: Daily Marketing Bot Run
+run-name: Daily marketing / ${{ inputs.mode || 'scheduled' }}
 
 on:
   schedule:
-    # Avoid top-of-hour congestion. Start 08:47 KST; wait until 09:00.
+    # Prepare before 09:00 KST; bot waits only AFTER search/curation.
     # GitHub schedule delivery is best effort, not an exact-time guarantee.
-    - cron: "47 23 * * *"
+    - cron: "42 23 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -13,6 +14,8 @@ on:
         default: run
         options:
           - run
+          - scheduled
+          - guard-check
           - telegram-test
           - error-alert-test
 
@@ -28,21 +31,8 @@ jobs:
   send-digest:
     if: ${{ github.event.repository.private == false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
-      - name: Wait until 09:00 KST for scheduled runs
-        if: ${{ github.event_name == 'schedule' }}
-        run: |
-          python3 - <<'PY'
-          from datetime import datetime, timezone, timedelta
-          import time
-          now = datetime.now(timezone(timedelta(hours=9)))
-          target = now.replace(hour=9, minute=0, second=0, microsecond=0)
-          delay = (target - now).total_seconds()
-          if 0 < delay <= 900:
-              time.sleep(delay)
-          print('Scheduled target: 09:00 KST; actual runner ready:', datetime.now(now.tzinfo).isoformat())
-          PY
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -68,11 +58,13 @@ jobs:
           PYTHONUNBUFFERED: "1"
           GITHUB_TOKEN: ${{ github.token }}
           BOT_MODE: ${{ inputs.mode || 'run' }}
+          DAILY_SCHEDULED: ${{ github.event_name == 'schedule' || inputs.mode == 'scheduled' }}
         run: |
           case "$BOT_MODE" in
             telegram-test) python bot.py --test-telegram ;;
             error-alert-test) python bot.py --test-error ;;
-            *) python bot.py ;;
+            guard-check) python daily.py watchdog --dry-run ;;
+            *) python daily.py run ;;
           esac
 
       # Runs even if dependency installation/import failed before bot.py could

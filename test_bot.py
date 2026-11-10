@@ -139,6 +139,16 @@ class Tests(unittest.TestCase):
             self.assertEqual(send.call_count, 5)  # start + 3 recommendations + summary
             self.assertIn('선정 이유', send.call_args_list[1].args[2]);ai.assert_called_once()
 
+    def test_scheduled_delivery_waits_only_after_search_and_ai(self):
+        with patch.dict(os.environ, ENV, clear=True), patch.object(bot, 'send_telegram') as send, patch.object(bot, 'search_repos', return_value=[repo(1)]) as search, patch.object(bot, 'github_get', return_value=None), patch.object(bot, 'curate', return_value={1: assessment(1, True)}) as ai:
+            def gate():
+                search.assert_called_once()
+                ai.assert_called_once()
+                send.assert_not_called()
+            with patch.object(bot, 'wait_for_delivery', side_effect=gate) as wait:
+                self.assertEqual(bot.entrypoint([]), 0)
+                wait.assert_called_once()
+
     def test_missing_gemini_key_is_notified_without_ai(self):
         with patch.dict(os.environ, {k: v for k, v in ENV.items() if k != 'GEMINI_KEY'}, clear=True), patch.object(bot, 'send_telegram') as send, patch.object(bot, 'search_repos', return_value=[repo(1)]), patch.object(bot, 'github_get', return_value=None):
             self.assertEqual(bot.entrypoint([]), 1)

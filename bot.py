@@ -262,13 +262,38 @@ def mark_error_notified():
         except OSError:
             print('경고: Actions 알림 상태 기록 실패', file=sys.stderr)
 
+def wait_for_delivery():
+    """Prepare first, then deliver at 09:00. Never sleep for an unbounded target."""
+    value = os.getenv('BOT_SEND_AT', '')
+    if not value:
+        return
+    try:
+        target = datetime.fromisoformat(value)
+        if target.tzinfo is None:
+            raise ValueError()
+        delay = (target-datetime.now(timezone.utc)).total_seconds()
+    except ValueError:
+        raise BotError('발송 시각 설정 오류') from None
+    if delay > 25*60:
+        raise BotError('발송 대기 시간이 25분을 넘어 중단')
+    if delay > 0:
+        print(f'추천 준비 완료 · 09:00 KST까지 {delay:.0f}초 대기', flush=True)
+        time.sleep(delay)
+
+
 def run(state, token, chat_id):
-    # Check Telegram BEFORE any AI call; zero useful results must still notify.
+    # Secrets are validated by entrypoint; scheduled runs search BEFORE 09:00.
     local = datetime.now(timezone(timedelta(hours=9)))
     timing = f'\n실제 시작: {local:%Y-%m-%d %H:%M} KST'
     if os.getenv('GITHUB_EVENT_NAME') == 'schedule':
         timing += '\n목표: 오전 09:00 KST · GitHub 예약 실행은 지연될 수 있습니다.'
-    send_telegram(token, chat_id, '🔎 Codex용 앱 마케팅 도구 검색을 시작합니다.' + timing + workflow_link())
+    announced = False
+    def announce():
+        nonlocal announced
+        if not announced:
+            wait_for_delivery()
+            send_telegram(token, chat_id, '🔎 Codex용 앱 마케팅 도구 추천을 보냅니다.' + timing + workflow_link())
+            announced = True
     model = os.getenv('GEMINI_MODEL', MODEL).strip()
     state.stage = 'GitHub 후보 검색'
     with requests.Session() as session:
@@ -313,6 +338,7 @@ def run(state, token, chat_id):
             else:
                 print(f"추천 후보: {repo['full_name']} — {item['reason'][:350]}")
         state.stage = '추천 메시지 전송'
+        announce()
         # Explicit Codex support first, then portable tools by existing star order.
         repos = sorted(repos, key=lambda r: (bool(r.get('repeat_candidate')), not bool(re.search(r'\bcodex\b',
             (r.get('excerpt') or '') + ' ' + (r.get('description') or ''), re.I))))
@@ -335,6 +361,7 @@ def run(state, token, chat_id):
             print(f"전송 완료: {repo['full_name']}")
     elif repos:
         state.stage = '비용 보호 · 무료 후보 안내'
+        announce()
         send_telegram(token, chat_id, '🛡️ AI 비용 보호 모드\n' + state.budget_note
                       + '\n추가 AI 요금 없이 검색 후보를 보냅니다. AI가 검토한 추천은 아닙니다.')
         portable = []
@@ -355,6 +382,7 @@ def run(state, token, chat_id):
             history.confirm(repo)
             print(f"무료 후보 전송: {repo['full_name']} — {decision.reason}")
     state.stage = '실행 결과 알림'
+    announce()
     title = '⚠️ 일부 오류와 함께 검색 종료' if state.errors else '✅ 앱 마케팅 검색 완료'
     if not state.sent and not state.fallback_sent:
         title += '\n이번 실행은 추천 0개입니다. 봇이 조용히 종료된 것이 아닙니다.'
