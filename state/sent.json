@@ -36,6 +36,10 @@
     "appeeky/aso-skills": {
       "status": "sent",
       "at": "2026-11-10T00:56:41.467033+00:00"
+    },
+    "invoke-ai/invokeai": {
+      "status": "reserved",
+      "at": "2026-11-11T03:02:01.193441+00:00"
     }
   }
 }
