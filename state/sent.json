@@ -44,6 +44,10 @@
     "zulko/moviepy": {
       "status": "sent",
       "at": "2026-11-11T03:02:05.126440+00:00"
+    },
+    "rybbit-io/rybbit": {
+      "status": "reserved",
+      "at": "2026-11-11T03:02:05.938032+00:00"
     }
   }
 }
