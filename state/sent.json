@@ -56,6 +56,10 @@
     "hbai-ltd/toonflow-app": {
       "status": "sent",
       "at": "2026-11-12T04:16:19.936390+00:00"
+    },
+    "openreplay/openreplay": {
+      "status": "reserved",
+      "at": "2026-11-12T04:16:20.767203+00:00"
     }
   }
 }
