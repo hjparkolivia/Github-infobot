@@ -52,6 +52,10 @@
     "rshankras/claude-code-apple-skills": {
       "status": "sent",
       "at": "2026-11-12T04:16:17.675233+00:00"
+    },
+    "hbai-ltd/toonflow-app": {
+      "status": "reserved",
+      "at": "2026-11-12T04:16:18.538204+00:00"
     }
   }
 }
