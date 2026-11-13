@@ -64,6 +64,10 @@
     "duixcom/duix-avatar": {
       "status": "sent",
       "at": "2026-11-13T03:37:22.732972+00:00"
+    },
+    "mautic/mautic": {
+      "status": "reserved",
+      "at": "2026-11-13T03:37:23.440324+00:00"
     }
   }
 }
