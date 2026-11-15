@@ -88,6 +88,10 @@
     "hkuds/vimax": {
       "status": "sent",
       "at": "2026-11-15T03:06:35.884807+00:00"
+    },
+    "snowplow/snowplow": {
+      "status": "reserved",
+      "at": "2026-11-15T03:06:36.775342+00:00"
     }
   }
 }
