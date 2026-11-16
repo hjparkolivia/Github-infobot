@@ -100,6 +100,10 @@
     "agricidaniel/claude-ads": {
       "status": "sent",
       "at": "2026-11-16T03:08:49.713656+00:00"
+    },
+    "tencent-hunyuan/hunyuanvideo": {
+      "status": "reserved",
+      "at": "2026-11-16T03:08:50.518997+00:00"
     }
   }
 }
