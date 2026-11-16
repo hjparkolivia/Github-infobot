@@ -96,6 +96,10 @@
     "openshot/openshot-qt": {
       "status": "sent",
       "at": "2026-11-15T03:06:40.331198+00:00"
+    },
+    "agricidaniel/claude-ads": {
+      "status": "reserved",
+      "at": "2026-11-16T03:08:48.260742+00:00"
     }
   }
 }
