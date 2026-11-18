@@ -112,6 +112,10 @@
     "meigen-ai/infinitetalk": {
       "status": "sent",
       "at": "2026-11-18T04:44:35.658754+00:00"
+    },
+    "mifi/editly": {
+      "status": "reserved",
+      "at": "2026-11-18T04:44:36.488354+00:00"
     }
   }
 }
