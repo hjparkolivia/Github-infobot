@@ -140,6 +140,10 @@
     "forget-c/jellyfish": {
       "status": "sent",
       "at": "2026-11-20T04:19:42.918760+00:00"
+    },
+    "mailtrain-org/mailtrain": {
+      "status": "reserved",
+      "at": "2026-11-20T04:19:43.804867+00:00"
     }
   }
 }
