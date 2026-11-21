@@ -148,6 +148,10 @@
     "wide-trace/open-higgsfield": {
       "status": "sent",
       "at": "2026-11-21T04:18:46.948606+00:00"
+    },
+    "leaperone/multipost-extension": {
+      "status": "reserved",
+      "at": "2026-11-21T04:18:47.806921+00:00"
     }
   }
 }
