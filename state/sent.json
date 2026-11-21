@@ -152,6 +152,10 @@
     "leaperone/multipost-extension": {
       "status": "sent",
       "at": "2026-11-21T04:18:49.425131+00:00"
+    },
+    "fireredteam/firered-openstoryline": {
+      "status": "reserved",
+      "at": "2026-11-21T04:18:50.154547+00:00"
     }
   }
 }
