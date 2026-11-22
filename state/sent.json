@@ -164,6 +164,10 @@
     "hao-ai-lab/fastvideo": {
       "status": "sent",
       "at": "2026-11-22T03:30:46.069901+00:00"
+    },
+    "langchain-ai/social-media-agent": {
+      "status": "reserved",
+      "at": "2026-11-22T03:30:46.816863+00:00"
     }
   }
 }
