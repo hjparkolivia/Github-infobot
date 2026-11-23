@@ -168,6 +168,10 @@
     "langchain-ai/social-media-agent": {
       "status": "sent",
       "at": "2026-11-22T03:30:48.050240+00:00"
+    },
+    "tencent-hunyuan/hunyuanvideo-1.5": {
+      "status": "reserved",
+      "at": "2026-11-23T04:01:22.936714+00:00"
     }
   }
 }
