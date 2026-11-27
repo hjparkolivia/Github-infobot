@@ -216,6 +216,10 @@
     "webav-tech/webav": {
       "status": "sent",
       "at": "2026-11-27T05:23:15.427155+00:00"
+    },
+    "samuraigpt/postiz-cheap": {
+      "status": "reserved",
+      "at": "2026-11-27T05:23:16.488530+00:00"
     }
   }
 }
