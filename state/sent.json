@@ -220,6 +220,10 @@
     "samuraigpt/postiz-cheap": {
       "status": "sent",
       "at": "2026-11-27T05:23:18.353944+00:00"
+    },
+    "facundoolano/aso": {
+      "status": "reserved",
+      "at": "2026-11-27T05:23:19.163433+00:00"
     }
   }
 }
