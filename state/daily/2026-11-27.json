@@ -1,7 +1,9 @@
 {
   "version": 1,
   "day": "2026-11-27",
-  "status": "running",
+  "status": "completed",
   "run_id": "45945320645",
-  "started_at": "2026-11-27T14:21:49.419840+09:00"
+  "started_at": "2026-11-27T14:21:49.419840+09:00",
+  "completed_at": "2026-11-27T14:23:22.698939+09:00",
+  "exit_code": 0
 }
