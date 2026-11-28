@@ -228,6 +228,10 @@
     "nexu-io/open-design": {
       "status": "sent",
       "at": "2026-11-28T04:59:03.273452+00:00"
+    },
+    "cogsend/cogsend": {
+      "status": "reserved",
+      "at": "2026-11-28T04:59:04.092488+00:00"
     }
   }
 }
